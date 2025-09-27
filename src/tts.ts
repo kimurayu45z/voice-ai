@@ -54,12 +54,12 @@ export async function textToSpeech(client: ElevenLabsClient) {
     };
 
     // 前後のテキストを設定
-    if (i > 0) {
-      requestOptions.previousText = chunks[i - 1]?.slice(-500) || ""; // 前のチャンクの最後500文字
-    }
-    if (i < chunks.length - 1) {
-      requestOptions.nextText = chunks[i + 1]?.slice(0, 500) || ""; // 次のチャンクの最初500文字
-    }
+    // if (i > 0) {
+    //   requestOptions.previousText = chunks[i - 1]?.slice(-500) || ""; // 前のチャンクの最後500文字
+    // }
+    // if (i < chunks.length - 1) {
+    //   requestOptions.nextText = chunks[i + 1]?.slice(0, 500) || ""; // 次のチャンクの最初500文字
+    // }
 
     const res = await client.textToSpeech.convert(
       voices.find((v) => (v.name = "Sarah"))?.voiceId!,

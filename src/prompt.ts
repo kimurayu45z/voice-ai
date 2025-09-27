@@ -1,7 +1,7 @@
 import type OpenAI from "openai";
 import fs from "fs";
 
-export async function createTextToRead(
+export async function createReport(
   client: OpenAI,
   systemPrompt: string,
   prompt: string
@@ -21,6 +21,12 @@ export async function createTextToRead(
     ],
   });
 
+  fs.writeFileSync("out/report.md", resp.output_text);
+}
+
+export async function createTextToRead(client: OpenAI) {
+  const report = fs.readFileSync("out/report.md");
+
   const resp2 = await client.responses.create({
     model: "gpt-5-2025-08-07",
     input: [
@@ -32,7 +38,7 @@ export async function createTextToRead(
 そのまま出力をプログラムで音声化APIに使いたいので、セクションごとのタイトルとかも要りません。台本のみ出力してください。
 
 \`\`\`
-${resp.output_text}
+${report}
 \`\`\`
 `,
       },

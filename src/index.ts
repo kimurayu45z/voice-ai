@@ -1,9 +1,9 @@
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import dotenv from "dotenv";
 import OpenAI from "openai";
-import { textToSpeech } from "./tts.js";
-import { createTextToRead } from "./prompt.js";
-import { mcp, yuukiHarumi } from "./template.js";
+import { combineAudioFiles, textToSpeech } from "./tts.js";
+import { createReport, createTextToRead } from "./prompt.js";
+import { crypto, mcp, yuukiHarumi } from "./template.js";
 
 dotenv.config();
 
@@ -23,10 +23,12 @@ const elevenlabs = new ElevenLabsClient({
 // console.log(await elevenlabs.voices.getAll());
 // throw Error();
 
-// await createTextToRead(
+// await createReport(
 //   openai,
-//   yuukiHarumi,
-//   "今日の株式市場のニュースを調べて、アナウンサーが読む台本にして。"
+//   crypto,
+//   "Binance CZが関わるASTERに関するニュースを調べてブログ記事を作って。"
 // );
+// await createTextToRead(openai);
 
 await textToSpeech(elevenlabs);
+await combineAudioFiles();

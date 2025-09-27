@@ -3,7 +3,7 @@ import dotenv from "dotenv";
 import OpenAI from "openai";
 import { textToSpeech } from "./tts.js";
 import { createTextToRead } from "./prompt.js";
-import { mcp } from "./template.js";
+import { mcp, yuukiHarumi } from "./template.js";
 
 dotenv.config();
 
@@ -25,7 +25,7 @@ const elevenlabs = new ElevenLabsClient({
 
 // await createTextToRead(
 //   openai,
-//   mcp,
+//   yuukiHarumi,
 //   "今日の株式市場のニュースを調べて、アナウンサーが読む台本にして。"
 // );
 

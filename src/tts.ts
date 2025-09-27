@@ -11,13 +11,14 @@ function splitTextIntoChunks(
   // テキストを段落（改行2つ）で分割
   const paragraphs = text.split(/\n\n+/);
 
-  // 3000文字制限を考慮して段落を結合
+  // 3000文字制限を考慮して段落を結合（SSMLのbreakタグを追加）
   const chunks: string[] = [];
   let currentChunk = "";
 
   for (const paragraph of paragraphs) {
     // 現在のチャンクに段落を追加した場合の長さを計算
-    const separator = currentChunk ? "\n\n" : "";
+    // 段落間に1.5秒のポーズを追加
+    const separator = currentChunk ? ' <break time="1.5s" /> ' : "";
     const potentialLength =
       currentChunk.length + separator.length + paragraph.length;
 
@@ -45,9 +46,7 @@ export async function textToSpeech(client: ElevenLabsClient) {
   const text = fs.readFileSync("out/speech.txt").toString();
   const chunks = splitTextIntoChunks(text, 3000);
 
-  // 各チャンクごとにconvertリクエストを送信
-  const audioStreams: ReadableStream<Uint8Array>[] = [];
-
+  // 各チャンクごとにconvertリクエストを送信して個別ファイルに保存
   for (let i = 0; i < chunks.length; i++) {
     const requestOptions: TextToSpeechRequest = {
       text: chunks[i] || "",
@@ -67,17 +66,42 @@ export async function textToSpeech(client: ElevenLabsClient) {
       requestOptions
     );
 
-    audioStreams.push(res);
+    // 各チャンクを個別のファイルに保存
+    const outputFileName = `out/output-${i}.mp3`;
+    const outputStream = fs.createWriteStream(outputFileName);
+    await pipeline(res, outputStream);
+    console.log(`チャンク ${i} が ${outputFileName} として保存されました`);
+  }
+}
+
+export async function combineAudioFiles(
+  outputFile: string = "out/output-final.mp3"
+) {
+  // output-*.mp3 ファイルを検索して番号順にソート
+  const files = fs
+    .readdirSync("out")
+    .filter((file) => file.match(/^output-\d+\.mp3$/))
+    .sort((a, b) => {
+      const numA = parseInt(a.match(/\d+/)![0]);
+      const numB = parseInt(b.match(/\d+/)![0]);
+      return numA - numB;
+    });
+
+  if (files.length === 0) {
+    console.log("結合する音声ファイルが見つかりませんでした");
+    return;
   }
 
-  // すべての音声ストリームを結合して1つのファイルに保存
-  const outputStream = fs.createWriteStream("out/output.mp3");
+  const outputStream = fs.createWriteStream(outputFile);
 
-  for (let i = 0; i < audioStreams.length; i++) {
-    await pipeline(audioStreams[i]!, outputStream, {
-      end: i === audioStreams.length - 1,
+  for (let i = 0; i < files.length; i++) {
+    const inputStream = fs.createReadStream(`out/${files[i]}`);
+    await pipeline(inputStream, outputStream, {
+      end: i === files.length - 1,
     });
   }
 
-  console.log("音声ファイルが output.mp3 として保存されました");
+  console.log(
+    `${files.length}個の音声ファイルが ${outputFile} として結合されました`
+  );
 }

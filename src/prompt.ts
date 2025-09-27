@@ -1,4 +1,5 @@
 import type OpenAI from "openai";
+import fs from "fs";
 
 export async function createTextToRead(
   client: OpenAI,
@@ -38,5 +39,5 @@ ${resp.output_text}
     ],
   });
 
-  return resp2.output_text;
+  fs.writeFileSync("out/speech.txt", resp2.output_text);
 }

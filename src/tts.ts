@@ -17,8 +17,8 @@ function splitTextIntoChunks(
 
   for (const paragraph of paragraphs) {
     // 現在のチャンクに段落を追加した場合の長さを計算
-    // 段落間に1.5秒のポーズを追加
-    const separator = currentChunk ? ' <break time="1.5s" /> ' : "";
+    // 段落間にポーズを追加
+    const separator = currentChunk ? "..." : "";
     const potentialLength =
       currentChunk.length + separator.length + paragraph.length;
 

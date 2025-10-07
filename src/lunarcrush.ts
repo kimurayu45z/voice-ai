@@ -11,7 +11,7 @@ export const topics = [
 
 export type Topic = (typeof topics)[number];
 
-export async function fetchHotCoins(): Promise<unknown[]> {
+export async function fetchCoinTopics(): Promise<{ data: { name: string }[] }> {
   const response = await fetch(
     `https://lunarcrush.com/api4/public/coins/list/v1?sort=social_volume_24h`,
     {
@@ -24,7 +24,7 @@ export async function fetchHotCoins(): Promise<unknown[]> {
   return response;
 }
 
-export async function fetchAiTopics(topic: string): Promise<string> {
+export async function fetchCoinTopic(topic: string): Promise<string> {
   const response = await fetch(`https://lunarcrush.ai/topic/${topic}`, {
     headers: {
       Authorization: `Bearer ${process.env.LUNARCRUSH_API_KEY}`,

@@ -7,16 +7,24 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "ai-topics": "npx tsx src/index.ts ai-topics",
+    "coin-topics": "npx tsx src/index.ts coin-topics",
+    "coin-topic": "npx tsx src/index.ts coin-topic",
+    "blog-gemini": "npx tsx src/index.ts blog-gemini",
+    "blog-claude": "npx tsx src/index.ts blog-claude",
+    "video-gen": "npx tsx src/index.ts video-gen",
+    "video-download": "npx tsx src/index.ts video-download"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",
     "typescript": "^5.9.2"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.65.0",
     "@elevenlabs/elevenlabs-js": "^2.16.0",
     "@google/genai": "^1.22.0",
     "dotenv": "^17.2.2",
-    "openai": "^5.23.0"
+    "openai": "^6.2.0"
   }
 }

@@ -3,14 +3,22 @@ import dotenv from "dotenv";
 import OpenAI from "openai";
 import { combineAudioFiles, textToSpeech } from "./tts.js";
 import { GoogleGenAI } from "@google/genai";
+import Anthropic from "@anthropic-ai/sdk";
 import {
   createReportOpenAi,
-  createTextBlogGemini,
+  createBlogGemini,
   createTextToReadOpenAi,
+  createBlogClaude,
 } from "./prompt.js";
 import { crypto, mcp, yuukiHarumi } from "./template.js";
-import { fetchAiTopics, fetchHotCoins } from "./lunarcrush.js";
+import { fetchCoinTopic, fetchCoinTopics } from "./lunarcrush.js";
 import * as fs from "fs";
+import {
+  checkVideoOpenAi,
+  createVideoOpenAi,
+  downloadVideoOpenAi,
+} from "./video.js";
+import { getAiNews } from "./apitube.js";
 
 dotenv.config();
 
@@ -28,24 +36,116 @@ const elevenlabs = new ElevenLabsClient({
 
 const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
-// console.log(await elevenlabs.models.list());
-// console.log(await elevenlabs.voices.getAll());
-// throw Error();
+const claude = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// await createReport(
-//   openai,
-//   yuukiHarumi,
-//   "今日の株式市場ニュースを調べて台本を作って。"
-// );
-// await createTextToRead(openai);
+const command = process.argv[2];
 
-// await textToSpeech(elevenlabs);
-// await combineAudioFiles();
+switch (command) {
+  case "openai-report":
+    await createReportOpenAi(
+      openai,
+      yuukiHarumi,
+      process.argv[3] || "今日の株式市場ニュースを調べて台本を作って。"
+    );
+    break;
 
-// const json = await fetchHotCoins();
-// fs.writeFileSync("out/hot-coins.json", JSON.stringify(json, undefined, 2));
+  case "openai-text":
+    await createTextToReadOpenAi(openai);
+    break;
 
-const text = await fetchAiTopics("metamask");
-fs.writeFileSync("out/report.md", text);
+  case "blog-gemini":
+    await createBlogGemini(gemini, "out/report.md", "out/blog-gemini.md");
+    break;
 
-await createTextBlogGemini(gemini);
+  case "blog-claude":
+    await createBlogClaude(
+      claude,
+      "out/report.md",
+      "out/blog-gemini.md",
+      "out/blog-claude.md"
+    );
+    break;
+
+  case "tts":
+    await textToSpeech(elevenlabs);
+    break;
+
+  case "combine":
+    await combineAudioFiles();
+    break;
+
+  case "ai-topics": {
+    const json = await getAiNews();
+    fs.writeFileSync("out/ai-topics.json", JSON.stringify(json, undefined, 2));
+    break;
+  }
+
+  case "coin-topics":
+    const json = await fetchCoinTopics();
+    fs.writeFileSync(
+      "out/coin-topics.json",
+      JSON.stringify(
+        json.data.map((d) => d.name),
+        undefined,
+        2
+      )
+    );
+    break;
+
+  case "coin-topic": {
+    if (!process.argv[3]) {
+      throw Error("coin topic must be specified");
+    }
+    const text = await fetchCoinTopic(process.argv[3]);
+    fs.writeFileSync("out/report.md", text);
+    break;
+  }
+
+  case "video-gen":
+    if (!process.argv[3]) {
+      throw Error("video prompt must be specified");
+    }
+    const videoId = await createVideoOpenAi(openai, process.argv[3]);
+    console.log(videoId);
+    break;
+
+  case "video-check":
+    if (!process.argv[3]) {
+      throw Error("video id must be specified");
+    }
+    const res = await checkVideoOpenAi(openai, process.argv[3]);
+    console.log(res);
+    break;
+
+  case "video-download":
+    if (!process.argv[3]) {
+      throw Error("video id must be specified");
+    }
+    await downloadVideoOpenAi(openai, process.argv[3]);
+    break;
+
+  case "models":
+    console.log(await elevenlabs.models.list());
+    break;
+
+  case "voices":
+    console.log(await elevenlabs.voices.getAll());
+    break;
+
+  default:
+    console.log(`
+Usage: npx tsx src/index.ts <command> [args]
+
+Commands:
+  openai-report [prompt]  - Generate report using OpenAI
+  openai-text             - Convert report to text for reading
+  blog-gemini             - Convert report to blog post
+  blog-claude             - Convert report to blog post
+  tts                     - Convert text to speech
+  combine                 - Combine audio files
+  hot-coins               - Fetch hot coins from LunarCrush
+  ai-topics [query]       - Fetch AI topics from LunarCrush
+  models                  - List ElevenLabs models
+  voices                  - List ElevenLabs voices
+`);
+}

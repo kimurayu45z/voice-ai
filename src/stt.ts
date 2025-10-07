@@ -166,7 +166,7 @@ async function generateVideoWithSubtitle(
         "-b:a 192k",
         "-pix_fmt yuv420p",
         "-shortest",
-        `-vf subtitles=${srtFilePath}`,
+        `-vf subtitles=${srtFilePath}:force_style='FontSize=24,PrimaryColour=&HFFFFFF,OutlineColour=&H80000000,BackColour=&H80000000,BorderStyle=3,Outline=1,Shadow=0,MarginV=20'`,
       ])
       .output(videoFilePath)
       .on("end", () => {

@@ -1,7 +1,6 @@
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import fs from "fs";
 import { pipeline } from "stream/promises";
-import { voices } from "./voices.js";
 import type { TextToSpeechRequest } from "@elevenlabs/elevenlabs-js/api/index.js";
 
 function splitTextIntoChunks(
@@ -42,7 +41,10 @@ function splitTextIntoChunks(
   return chunks;
 }
 
-export async function textToSpeech(client: ElevenLabsClient) {
+export async function textToSpeech(
+  client: ElevenLabsClient,
+  voiceId = "RZ7g88QZqj5QobZ3Y0Ok"
+) {
   const text = fs.readFileSync("out/speech.txt").toString();
   const chunks = splitTextIntoChunks(text, 3000);
 
@@ -61,11 +63,7 @@ export async function textToSpeech(client: ElevenLabsClient) {
     //   requestOptions.nextText = chunks[i + 1]?.slice(0, 500) || ""; // 次のチャンクの最初500文字
     // }
 
-    const res = await client.textToSpeech.convert(
-      voices.find((v) => (v.name = "Sarah"))?.voiceId!,
-      // "RZ7g88QZqj5QobZ3Y0Ok",
-      requestOptions
-    );
+    const res = await client.textToSpeech.convert(voiceId, requestOptions);
 
     // 各チャンクを個別のファイルに保存
     const outputFileName = `out/output-${i}.mp3`;

@@ -63,6 +63,7 @@ export async function textToSpeech(client: ElevenLabsClient) {
 
     const res = await client.textToSpeech.convert(
       voices.find((v) => (v.name = "Sarah"))?.voiceId!,
+      // "RZ7g88QZqj5QobZ3Y0Ok",
       requestOptions
     );
 

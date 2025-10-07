@@ -2,7 +2,11 @@ import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import dotenv from "dotenv";
 import OpenAI from "openai";
 import { combineAudioFiles, textToSpeech } from "./tts.js";
-import { speechToText } from "./stt.js";
+import {
+  combineVideos,
+  generateVideosWithSubtitles,
+  speechToText,
+} from "./stt.js";
 import { GoogleGenAI } from "@google/genai";
 import Anthropic from "@anthropic-ai/sdk";
 import {
@@ -73,8 +77,13 @@ switch (command) {
     await textToSpeech(elevenlabs);
     break;
 
-  case "stt":
+  case "stt-srt":
     await speechToText(elevenlabs);
+    break;
+
+  case "stt-mp4":
+    await generateVideosWithSubtitles();
+    await combineVideos();
     break;
 
   case "combine":

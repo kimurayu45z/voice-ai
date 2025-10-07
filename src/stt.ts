@@ -157,7 +157,7 @@ async function generateVideoWithSubtitle(
   return new Promise<void>((resolve, reject) => {
     ffmpeg()
       .input("background.jpg")
-      .loop(1)
+      .inputOptions(["-loop 1"])
       .input(audioFilePath)
       .outputOptions([
         "-c:v libx264",

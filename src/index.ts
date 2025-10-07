@@ -19,6 +19,8 @@ import {
   downloadVideoOpenAi,
 } from "./video.js";
 import { getAiNews } from "./apitube.js";
+import { getAiNewsNewsApi } from "./newsapi.js";
+import { checkMusicInstrumental, createMusicInstrumental } from "./mureka.js";
 
 dotenv.config();
 
@@ -75,7 +77,7 @@ switch (command) {
     break;
 
   case "ai-topics": {
-    const json = await getAiNews();
+    const json = await getAiNewsNewsApi();
     fs.writeFileSync("out/ai-topics.json", JSON.stringify(json, undefined, 2));
     break;
   }
@@ -101,28 +103,49 @@ switch (command) {
     break;
   }
 
-  case "video-gen":
+  case "video-gen": {
     if (!process.argv[3]) {
       throw Error("video prompt must be specified");
     }
-    const videoId = await createVideoOpenAi(openai, process.argv[3]);
-    console.log(videoId);
+    const res = await createVideoOpenAi(openai, process.argv[3]);
+    console.log(res.id);
     break;
+  }
 
-  case "video-check":
+  case "video-check": {
     if (!process.argv[3]) {
       throw Error("video id must be specified");
     }
     const res = await checkVideoOpenAi(openai, process.argv[3]);
     console.log(res);
     break;
+  }
 
-  case "video-download":
+  case "video-download": {
     if (!process.argv[3]) {
       throw Error("video id must be specified");
     }
     await downloadVideoOpenAi(openai, process.argv[3]);
     break;
+  }
+
+  case "music-gen": {
+    if (!process.argv[3]) {
+      throw Error("music prompt must be specified");
+    }
+    const res = await createMusicInstrumental(process.argv[3]);
+    console.log(res);
+    break;
+  }
+
+  case "music-check": {
+    if (!process.argv[3]) {
+      throw Error("music id must be specified");
+    }
+    const res = await checkMusicInstrumental(process.argv[3]);
+    console.log(res);
+    break;
+  }
 
   case "models":
     console.log(await elevenlabs.models.list());

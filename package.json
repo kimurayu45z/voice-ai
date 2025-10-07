@@ -14,7 +14,10 @@
     "blog-gemini": "npx tsx src/index.ts blog-gemini",
     "blog-claude": "npx tsx src/index.ts blog-claude",
     "video-gen": "npx tsx src/index.ts video-gen",
-    "video-download": "npx tsx src/index.ts video-download"
+    "video-check": "npx tsx src/index.ts video-check",
+    "video-download": "npx tsx src/index.ts video-download",
+    "music-gen": "npx tsx src/index.ts music-gen",
+    "music-check": "npx tsx src/index.ts music-check"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",

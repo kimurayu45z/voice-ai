@@ -105,6 +105,8 @@ async function generateSrtFromWords(
     totalChars += wordText.length;
   }
 
+  let needsSpace = false; // 10文字を超えたかどうかのフラグ
+
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
     if (!token) continue;
@@ -131,9 +133,16 @@ async function generateSrtFromWords(
     if (shouldStartNewBunsetsu) {
       // 文節を完成させる
       const bunsetsuText = currentBunsetsu.join("");
+
+      // 10文字を超えていてスペースが必要な場合、この文節の前にスペースを追加
+      if (needsSpace) {
+        currentSentence.push(" ");
+        needsSpace = false;
+      }
+
       currentSentence.push(bunsetsuText);
 
-      // 最後のスペース以降が10文字を超えている場合はスペースを追加
+      // 最後のスペース以降が10文字を超えているかチェック
       const currentText = currentSentence.join("");
       const lastSpaceIndex = currentText.lastIndexOf(" ");
       const textSinceLastSpace =
@@ -142,7 +151,7 @@ async function generateSrtFromWords(
           : currentText.substring(lastSpaceIndex + 1);
 
       if (textSinceLastSpace.length > maxCharsPerSubtitle) {
-        currentSentence.push(" ");
+        needsSpace = true;
       }
 
       currentBunsetsu = [];
@@ -182,6 +191,7 @@ async function generateSrtFromWords(
 
         currentSentence = [];
         sentenceStartChar = processedChars;
+        needsSpace = false; // 文の終わりでフラグをリセット
       }
     }
   }
@@ -229,56 +239,59 @@ export async function speechToText(client: ElevenLabsClient) {
     return;
   }
 
-  for (const file of files) {
-    const audioFilePath = `out/${file}`;
-    const srtFilePath = audioFilePath.replace(".mp3", ".srt");
-    console.log(`${audioFilePath} の文字起こしを開始...`);
+  // 各ファイルを並列処理
+  await Promise.all(
+    files.map(async (file) => {
+      const audioFilePath = `out/${file}`;
+      const srtFilePath = audioFilePath.replace(".mp3", ".srt");
+      console.log(`${audioFilePath} の文字起こしを開始...`);
 
-    try {
-      const audioFileStream = fs.createReadStream(audioFilePath);
+      try {
+        const audioFileStream = fs.createReadStream(audioFilePath);
 
-      // Step 1: Submit the audio file for transcription and get the ID
-      const res = await client.speechToText.convert({
-        file: audioFileStream,
-        modelId: "scribe_v1",
-      });
-      const transcriptionId = res.transcriptionId || "";
+        // Step 1: Submit the audio file for transcription and get the ID
+        const res = await client.speechToText.convert({
+          file: audioFileStream,
+          modelId: "scribe_v1",
+        });
+        const transcriptionId = res.transcriptionId || "";
 
-      console.log(`Transcription job started with ID: ${transcriptionId}`);
+        console.log(`Transcription job started with ID: ${transcriptionId}`);
 
-      // Step 2: Poll for the result using the transcription ID
-      let finalResult: SpeechToTextChunkResponseModel | null = null;
-      while (true) {
-        console.log(`Checking status for job ${transcriptionId}...`);
-        const response = await client.speechToText.transcripts.get(
-          transcriptionId
-        );
+        // Step 2: Poll for the result using the transcription ID
+        let finalResult: SpeechToTextChunkResponseModel | null = null;
+        while (true) {
+          console.log(`Checking status for job ${transcriptionId}...`);
+          const response = await client.speechToText.transcripts.get(
+            transcriptionId
+          );
 
-        // Check if response is completed (has text property)
-        if ("text" in response && response.text) {
-          finalResult = response;
-          console.log("Transcription completed.");
-          break;
+          // Check if response is completed (has text property)
+          if ("text" in response && response.text) {
+            finalResult = response;
+            console.log("Transcription completed.");
+            break;
+          }
+
+          // Wait for 5 seconds before checking again
+          await sleep(5000);
         }
 
-        // Wait for 5 seconds before checking again
-        await sleep(5000);
+        // Step 3: Generate SRT content from the words
+        const srtContent = finalResult?.words
+          ? await generateSrtFromWords(finalResult.words)
+          : "";
+
+        fs.writeFileSync(srtFilePath, srtContent);
+        console.log(`字幕ファイルが ${srtFilePath} として保存されました`);
+      } catch (error) {
+        console.error(
+          `${audioFilePath} の文字起こし中にエラーが発生しました:`,
+          error
+        );
       }
-
-      // Step 3: Generate SRT content from the words
-      const srtContent = finalResult?.words
-        ? await generateSrtFromWords(finalResult.words)
-        : "";
-
-      fs.writeFileSync(srtFilePath, srtContent);
-      console.log(`字幕ファイルが ${srtFilePath} として保存されました`);
-    } catch (error) {
-      console.error(
-        `${audioFilePath} の文字起こし中にエラーが発生しました:`,
-        error
-      );
-    }
-  }
+    })
+  );
 }
 
 function getAudioFiles(): string[] {
@@ -343,14 +356,21 @@ export async function generateVideosWithSubtitles() {
     return;
   }
 
-  for (const file of files) {
-    const audioFilePath = `out/${file}`;
-    const srtFilePath = audioFilePath.replace(".mp3", ".srt");
-    const videoFilePath = audioFilePath.replace(".mp3", ".mp4");
+  // 各ファイルを並列処理
+  await Promise.all(
+    files.map(async (file) => {
+      const audioFilePath = `out/${file}`;
+      const srtFilePath = audioFilePath.replace(".mp3", ".srt");
+      const videoFilePath = audioFilePath.replace(".mp3", ".mp4");
 
-    console.log(`${videoFilePath} の生成を開始...`);
-    await generateVideoWithSubtitle(audioFilePath, srtFilePath, videoFilePath);
-  }
+      console.log(`${videoFilePath} の生成を開始...`);
+      await generateVideoWithSubtitle(
+        audioFilePath,
+        srtFilePath,
+        videoFilePath
+      );
+    })
+  );
 }
 
 async function concatVideosWithFfmpeg(

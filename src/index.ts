@@ -74,7 +74,7 @@ switch (command) {
     break;
 
   case "tts":
-    await textToSpeech(elevenlabs /*"3VEofVNyr4k6BtjvBTfN"*/);
+    await textToSpeech(elevenlabs, "3VEofVNyr4k6BtjvBTfN");
     break;
 
   case "stt-srt":

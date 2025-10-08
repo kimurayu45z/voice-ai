@@ -36,7 +36,7 @@ function splitTextIntoChunks(
 
 export async function textToSpeech(
   client: ElevenLabsClient,
-  voiceId = "RZ7g88QZqj5QobZ3Y0Ok"
+  voiceId = "3VEofVNyr4k6BtjvBTfN"
 ) {
   const text = fs.readFileSync("out/speech.txt").toString();
   const chunks = splitTextIntoChunks(text, 500);
@@ -46,29 +46,23 @@ export async function textToSpeech(
     console.log(`チャンク${i}: ${chunk.length}文字`);
   });
 
-  // 各チャンクごとにconvertリクエストを送信して個別ファイルに保存
-  for (let i = 0; i < chunks.length; i++) {
-    const requestOptions: TextToSpeechRequest = {
-      text: chunks[i] || "",
-      modelId: "eleven_v3",
-    };
+  // 各チャンクを並列処理
+  await Promise.all(
+    chunks.map(async (chunk, i) => {
+      const requestOptions: TextToSpeechRequest = {
+        text: chunk,
+        modelId: "eleven_v3",
+      };
 
-    // 前後のテキストを設定
-    // if (i > 0) {
-    //   requestOptions.previousText = chunks[i - 1]?.slice(-500) || ""; // 前のチャンクの最後500文字
-    // }
-    // if (i < chunks.length - 1) {
-    //   requestOptions.nextText = chunks[i + 1]?.slice(0, 500) || ""; // 次のチャンクの最初500文字
-    // }
+      const res = await client.textToSpeech.convert(voiceId, requestOptions);
 
-    const res = await client.textToSpeech.convert(voiceId, requestOptions);
-
-    // 各チャンクを個別のファイルに保存
-    const outputFileName = `out/output-${i}.mp3`;
-    const outputStream = fs.createWriteStream(outputFileName);
-    await pipeline(res, outputStream);
-    console.log(`チャンク ${i} が ${outputFileName} として保存されました`);
-  }
+      // 各チャンクを個別のファイルに保存
+      const outputFileName = `out/output-${i}.mp3`;
+      const outputStream = fs.createWriteStream(outputFileName);
+      await pipeline(res, outputStream);
+      console.log(`チャンク ${i} が ${outputFileName} として保存されました`);
+    })
+  );
 }
 
 export async function combineAudioFiles(

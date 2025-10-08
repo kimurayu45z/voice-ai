@@ -4,6 +4,7 @@ import fs from "fs";
 import ffmpeg from "fluent-ffmpeg";
 import kuromoji from "kuromoji";
 import { promisify } from "util";
+import Anthropic from "@anthropic-ai/sdk";
 
 // --- Speech-to-Text (SRT generation) ---
 
@@ -43,43 +44,14 @@ function formatTimestamp(seconds: number): string {
 }
 
 function isSentenceEnd(token: kuromoji.IpadicFeatures): boolean {
-  // 句点（。）や感嘆符、疑問符で文末を判定
-  return (
-    token.pos === "記号" &&
-    (token.surface_form === "。" ||
-      token.surface_form === "." ||
-      token.surface_form === "!" ||
-      token.surface_form === "！" ||
-      token.surface_form === "?" ||
-      token.surface_form === "？")
-  );
-}
-
-function isParticle(token: kuromoji.IpadicFeatures): boolean {
-  // 助詞かどうかを判定
-  return token.pos === "助詞";
-}
-
-function isIndependentWord(token: kuromoji.IpadicFeatures): boolean {
-  // 自立語かどうかを判定（新しい文節の開始となる品詞）
-  const independentPOS = [
-    "名詞",
-    "動詞",
-    "形容詞",
-    "副詞",
-    "接続詞",
-    "連体詞",
-    "感動詞",
-    "接頭詞",
-  ];
-  return independentPOS.includes(token.pos);
+  // 句点（。）で文末を判定
+  return token.pos === "記号" && token.surface_form === "。";
 }
 
 async function generateSrtFromWords(
   words: Array<{ text: string; start?: number; end?: number }>
 ): Promise<string> {
   const tokenizer = await getTokenizer();
-  const maxCharsPerSubtitle = 10; // 最大文字数
 
   // words配列から全テキストを結合
   const fullText = words.map((w) => w.text).join("");
@@ -90,85 +62,28 @@ async function generateSrtFromWords(
   let srtContent = "";
   let index = 1;
   let currentSentence: string[] = [];
-  let currentBunsetsu: string[] = []; // 現在の文節
   let sentenceStartChar = 0;
   let processedChars = 0;
 
   // 文字数からwords配列のインデックスを取得するマップを作成
   const charToWordMap: number[] = [];
-  let totalChars = 0;
   for (let i = 0; i < words.length; i++) {
     const wordText = words[i]?.text || "";
     for (let j = 0; j < wordText.length; j++) {
       charToWordMap.push(i);
     }
-    totalChars += wordText.length;
   }
-
-  let needsSpace = false; // 10文字を超えたかどうかのフラグ
 
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
     if (!token) continue;
 
-    const prevToken = i > 0 ? tokens[i - 1] : null;
-
-    // 現在の文節が空ではなく、かつ、トークンが自立語の場合
-    // -> 新しい文節の始まりと判断
-    // ただし、数字や記号、接尾辞が連続する場合は同じ文節として扱う
-    const shouldStartNewBunsetsu =
-      currentBunsetsu.length > 0 &&
-      isIndependentWord(token) &&
-      !(
-        prevToken &&
-        (prevToken.pos === "名詞" && prevToken.pos_detail_1 === "数") &&
-        (token.pos === "名詞" || token.pos === "記号")
-      ) &&
-      !(
-        prevToken &&
-        prevToken.pos === "記号" &&
-        (token.pos === "名詞" || token.pos === "記号")
-      );
-
-    if (shouldStartNewBunsetsu) {
-      // 文節を完成させる
-      const bunsetsuText = currentBunsetsu.join("");
-
-      // 10文字を超えていてスペースが必要な場合、この文節の前にスペースを追加
-      if (needsSpace) {
-        currentSentence.push(" ");
-        needsSpace = false;
-      }
-
-      currentSentence.push(bunsetsuText);
-
-      // 最後のスペース以降が10文字を超えているかチェック
-      const currentText = currentSentence.join("");
-      const lastSpaceIndex = currentText.lastIndexOf(" ");
-      const textSinceLastSpace =
-        lastSpaceIndex === -1
-          ? currentText
-          : currentText.substring(lastSpaceIndex + 1);
-
-      if (textSinceLastSpace.length > maxCharsPerSubtitle) {
-        needsSpace = true;
-      }
-
-      currentBunsetsu = [];
-    }
-
-    currentBunsetsu.push(token.surface_form);
+    currentSentence.push(token.surface_form);
     processedChars += token.surface_form.length;
 
     const shouldBreak = isSentenceEnd(token);
 
     if (shouldBreak) {
-      // 残りの文節を追加
-      if (currentBunsetsu.length > 0) {
-        currentSentence.push(currentBunsetsu.join(""));
-        currentBunsetsu = [];
-      }
-
       if (currentSentence.length > 0) {
         // 開始と終了のwordsインデックスを取得
         const startWordIndex = charToWordMap[sentenceStartChar] ?? 0;
@@ -180,7 +95,6 @@ async function generateSrtFromWords(
         const startTime = words[startWordIndex]?.start ?? 0;
         const endTime = words[endWordIndex]?.end ?? startTime;
 
-        // スペースはそのまま（改行に置き換えない）
         const text = currentSentence.join("");
         srtContent += `${index}\n`;
         srtContent += `${formatTimestamp(startTime)} --> ${formatTimestamp(
@@ -191,16 +105,11 @@ async function generateSrtFromWords(
 
         currentSentence = [];
         sentenceStartChar = processedChars;
-        needsSpace = false; // 文の終わりでフラグをリセット
       }
     }
   }
 
   // 残りのテキストがあれば追加
-  if (currentBunsetsu.length > 0) {
-    currentSentence.push(currentBunsetsu.join(""));
-  }
-
   if (currentSentence.length > 0) {
     const startWordIndex = charToWordMap[sentenceStartChar] ?? 0;
     const endWordIndex =
@@ -209,7 +118,6 @@ async function generateSrtFromWords(
     const startTime = words[startWordIndex]?.start ?? 0;
     const endTime = words[endWordIndex]?.end ?? startTime;
 
-    // スペースはそのまま（改行に置き換えない）
     const text = currentSentence.join("");
     srtContent += `${index}\n`;
     srtContent += `${formatTimestamp(startTime)} --> ${formatTimestamp(
@@ -224,7 +132,10 @@ async function generateSrtFromWords(
 // Helper function to delay execution
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export async function speechToText(client: ElevenLabsClient) {
+export async function speechToText(
+  client: ElevenLabsClient,
+  claudeClient: Anthropic
+) {
   const files = fs
     .readdirSync("out")
     .filter((file) => file.match(/^output-\d+\.mp3$/))
@@ -239,7 +150,7 @@ export async function speechToText(client: ElevenLabsClient) {
     return;
   }
 
-  // 各ファイルを並列処理
+  // Step 1: 各ファイルを並列で文字起こし
   await Promise.all(
     files.map(async (file) => {
       const audioFilePath = `out/${file}`;
@@ -249,7 +160,6 @@ export async function speechToText(client: ElevenLabsClient) {
       try {
         const audioFileStream = fs.createReadStream(audioFilePath);
 
-        // Step 1: Submit the audio file for transcription and get the ID
         const res = await client.speechToText.convert({
           file: audioFileStream,
           modelId: "scribe_v1",
@@ -258,7 +168,6 @@ export async function speechToText(client: ElevenLabsClient) {
 
         console.log(`Transcription job started with ID: ${transcriptionId}`);
 
-        // Step 2: Poll for the result using the transcription ID
         let finalResult: SpeechToTextChunkResponseModel | null = null;
         while (true) {
           console.log(`Checking status for job ${transcriptionId}...`);
@@ -266,18 +175,15 @@ export async function speechToText(client: ElevenLabsClient) {
             transcriptionId
           );
 
-          // Check if response is completed (has text property)
           if ("text" in response && response.text) {
             finalResult = response;
             console.log("Transcription completed.");
             break;
           }
 
-          // Wait for 5 seconds before checking again
           await sleep(5000);
         }
 
-        // Step 3: Generate SRT content from the words
         const srtContent = finalResult?.words
           ? await generateSrtFromWords(finalResult.words)
           : "";
@@ -292,6 +198,76 @@ export async function speechToText(client: ElevenLabsClient) {
       }
     })
   );
+
+  // Step 2: Claude APIで訂正
+  console.log("\nClaude APIで文字起こしを訂正します...");
+  const speechText = fs.readFileSync("out/speech.txt", "utf-8");
+
+  await Promise.all(
+    files.map(async (file) => {
+      const srtPath = `out/${file.replace(".mp3", ".srt")}`;
+      const correctedSrtPath = `out/${file.replace(".mp3", "-corrected.srt")}`;
+
+      if (!fs.existsSync(srtPath)) {
+        console.log(`${srtPath} が見つかりません。スキップします。`);
+        return;
+      }
+
+      const srtContent = fs.readFileSync(srtPath, "utf-8");
+      console.log(`${file} の訂正を開始...`);
+
+      try {
+        const message = await claudeClient.messages.create({
+          model: "claude-sonnet-4-5-20250929",
+          max_tokens: 8000,
+          system: `あなたは文字起こしの訂正専門家です。音声認識で生成されたSRTファイルの文字起こしを、元の台本を参照して訂正してください。
+
+重要な注意事項：
+1. タイムスタンプは絶対に変更しないでください
+2. 文字起こしの誤認識（同音異義語の間違い、聞き間違いなど）を訂正してください
+3. 元の台本と照らし合わせて、正しい表現に修正してください
+4. SRTファイルのフォーマットを保持してください
+5. 各字幕テキストが10文字を超える場合、自然な位置（文節の区切り）に半角スペースを挿入してください
+6. スペースは10文字ごとを目安に、読みやすい位置に入れてください（例：「金相場が史上初めて 1トロイオンス 4000ドル台に乗せ」）`,
+          messages: [
+            {
+              role: "user",
+              content: `以下の元の台本を参照して、SRTファイルの文字起こしを訂正してください。
+
+元の台本：
+\`\`\`
+${speechText}
+\`\`\`
+
+訂正するSRTファイル：
+\`\`\`
+${srtContent}
+\`\`\`
+
+訂正後のSRTファイルをそのまま出力してください（説明文などは不要です）。`,
+            },
+          ],
+        });
+
+        const textBlock = message.content.find(
+          (block) => block.type === "text"
+        );
+        const correctedText =
+          textBlock && textBlock.type === "text" ? textBlock.text : "";
+
+        const cleanedText = correctedText
+          .replace(/^```[\s\S]*?\n/, "")
+          .replace(/\n```$/, "");
+
+        fs.writeFileSync(correctedSrtPath, cleanedText);
+        console.log(`${file} の訂正が完了しました`);
+      } catch (error) {
+        console.error(`${file} の訂正中にエラーが発生しました:`, error);
+      }
+    })
+  );
+
+  console.log("\nすべての文字起こしと訂正が完了しました");
 }
 
 function getAudioFiles(): string[] {
@@ -360,7 +336,12 @@ export async function generateVideosWithSubtitles() {
   await Promise.all(
     files.map(async (file) => {
       const audioFilePath = `out/${file}`;
-      const srtFilePath = audioFilePath.replace(".mp3", ".srt");
+      // 訂正版のSRTファイルを優先的に使用
+      const correctedSrtPath = audioFilePath.replace(".mp3", "-corrected.srt");
+      const originalSrtPath = audioFilePath.replace(".mp3", ".srt");
+      const srtFilePath = fs.existsSync(correctedSrtPath)
+        ? correctedSrtPath
+        : originalSrtPath;
       const videoFilePath = audioFilePath.replace(".mp3", ".mp4");
 
       console.log(`${videoFilePath} の生成を開始...`);
@@ -377,32 +358,34 @@ async function concatVideosWithFfmpeg(
   files: string[],
   outputPath: string
 ): Promise<void> {
-  const fileListPath = "out/filelist.txt";
-  const fileListContent = files.map((file) => `file '${file}'`).join("\n");
-  fs.writeFileSync(fileListPath, fileListContent);
+  return new Promise<void>((resolve, reject) => {
+    const cmd = ffmpeg();
 
-  try {
-    await new Promise<void>((resolve, reject) => {
-      ffmpeg()
-        .input(fileListPath)
-        .inputOptions(["-f concat", "-safe 0"])
-        .outputOptions(["-c copy"])
-        .output(outputPath)
-        .on("end", () => {
-          console.log(`${outputPath} の生成が完了しました`);
-          resolve();
-        })
-        .on("error", (err) => {
-          console.error("動画結合中にエラーが発生しました:", err);
-          reject(err);
-        })
-        .run();
+    // 各ファイルを入力として追加
+    files.forEach((file) => {
+      cmd.input(`out/${file}`);
     });
-  } finally {
-    if (fs.existsSync(fileListPath)) {
-      fs.unlinkSync(fileListPath);
-    }
-  }
+
+    // filter_complexを使用して動画と音声を同期させながら結合
+    const filterComplex =
+      files.map((_, i) => `[${i}:v][${i}:a]`).join("") +
+      `concat=n=${files.length}:v=1:a=1[outv][outa]`;
+
+    cmd
+      .complexFilter(filterComplex)
+      .outputOptions(["-map", "[outv]", "-map", "[outa]"])
+      .outputOptions(["-movflags", "+faststart"])
+      .output(outputPath)
+      .on("end", () => {
+        console.log(`${outputPath} の生成が完了しました`);
+        resolve();
+      })
+      .on("error", (err) => {
+        console.error("動画結合中にエラーが発生しました:", err);
+        reject(err);
+      })
+      .run();
+  });
 }
 
 export async function combineVideos() {
@@ -415,4 +398,78 @@ export async function combineVideos() {
 
   console.log("動画ファイルの結合を開始...");
   await concatVideosWithFfmpeg(files, "out/output-final.mp4");
+}
+
+export async function correctSrtWithClaude(client: Anthropic) {
+  const speechText = fs.readFileSync("out/speech.txt", "utf-8");
+  const srtFiles = fs
+    .readdirSync("out")
+    .filter((file) => file.match(/^output-\d+\.srt$/))
+    .sort((a, b) => {
+      const numA = parseInt(a.match(/\d+/)![0]);
+      const numB = parseInt(b.match(/\d+/)![0]);
+      return numA - numB;
+    });
+
+  if (srtFiles.length === 0) {
+    console.log("訂正対象のSRTファイルが見つかりませんでした");
+    return;
+  }
+
+  console.log(`${srtFiles.length}個のSRTファイルを訂正します...`);
+
+  // 各SRTファイルを並列処理
+  await Promise.all(
+    srtFiles.map(async (file) => {
+      const srtPath = `out/${file}`;
+      const srtContent = fs.readFileSync(srtPath, "utf-8");
+
+      console.log(`${file} の訂正を開始...`);
+
+      const message = await client.messages.create({
+        model: "claude-sonnet-4-5-20250929",
+        max_tokens: 8000,
+        system: `あなたは文字起こしの訂正専門家です。音声認識で生成されたSRTファイルの文字起こしを、元の台本を参照して訂正してください。
+
+重要な注意事項：
+1. タイムスタンプは絶対に変更しないでください
+2. 文字起こしの誤認識（同音異義語の間違い、聞き間違いなど）を訂正してください
+3. 元の台本と照らし合わせて、正しい表現に修正してください
+4. SRTファイルのフォーマットを保持してください
+5. スペースによる区切りはそのまま保持してください`,
+        messages: [
+          {
+            role: "user",
+            content: `以下の元の台本を参照して、SRTファイルの文字起こしを訂正してください。
+
+元の台本：
+\`\`\`
+${speechText}
+\`\`\`
+
+訂正するSRTファイル：
+\`\`\`
+${srtContent}
+\`\`\`
+
+訂正後のSRTファイルをそのまま出力してください（説明文などは不要です）。`,
+          },
+        ],
+      });
+
+      const textBlock = message.content.find((block) => block.type === "text");
+      const correctedText =
+        textBlock && textBlock.type === "text" ? textBlock.text : "";
+
+      // コードブロックで囲まれている場合は取り除く
+      const cleanedText = correctedText
+        .replace(/^```[\s\S]*?\n/, "")
+        .replace(/\n```$/, "");
+
+      fs.writeFileSync(srtPath, cleanedText);
+      console.log(`${file} の訂正が完了しました`);
+    })
+  );
+
+  console.log("すべてのSRTファイルの訂正が完了しました");
 }

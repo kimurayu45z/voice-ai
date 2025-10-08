@@ -78,7 +78,7 @@ switch (command) {
     break;
 
   case "stt-srt":
-    await speechToText(elevenlabs);
+    await speechToText(elevenlabs, claude);
     break;
 
   case "stt-mp4":

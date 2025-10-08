@@ -15,7 +15,7 @@ import {
   createTextToReadOpenAi,
   createBlogClaude,
 } from "./prompt.js";
-import { crypto, mcp, yuukiHarumi } from "./template.js";
+import { crypto, mcp, yuukiHarumi, yuukiHarumiSpeech } from "./template.js";
 import { fetchCoinTopic, fetchCoinTopics } from "./lunarcrush.js";
 import * as fs from "fs";
 import {
@@ -57,24 +57,24 @@ switch (command) {
     break;
 
   case "openai-text":
-    await createTextToReadOpenAi(openai);
+    await createTextToReadOpenAi(openai, yuukiHarumiSpeech);
     break;
 
   case "blog-gemini":
-    await createBlogGemini(gemini, "out/report.md", "out/blog-gemini.md");
+    await createBlogGemini(gemini, "out/report-coin.md", "out/blog-gemini.md");
     break;
 
   case "blog-claude":
     await createBlogClaude(
       claude,
-      "out/report.md",
+      "out/report-coin.md",
       "out/blog-gemini.md",
       "out/blog-claude.md"
     );
     break;
 
   case "tts":
-    await textToSpeech(elevenlabs);
+    await textToSpeech(elevenlabs /*"3VEofVNyr4k6BtjvBTfN"*/);
     break;
 
   case "stt-srt":
@@ -113,7 +113,7 @@ switch (command) {
       throw Error("coin topic must be specified");
     }
     const text = await fetchCoinTopic(process.argv[3]);
-    fs.writeFileSync("out/report.md", text);
+    fs.writeFileSync("out/report-coin.md", text);
     break;
   }
 

@@ -26,12 +26,19 @@ export async function createReportOpenAi(
   fs.writeFileSync("out/report.md", resp.output_text);
 }
 
-export async function createTextToReadOpenAi(client: OpenAI) {
+export async function createTextToReadOpenAi(
+  client: OpenAI,
+  systemPrompt: string
+) {
   const report = fs.readFileSync("out/report.md");
 
   const resp2 = await client.responses.create({
     model: "gpt-5-2025-08-07",
     input: [
+      {
+        role: "system",
+        content: systemPrompt,
+      },
       {
         role: "user",
         content: `

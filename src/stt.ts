@@ -2,8 +2,29 @@ import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import type { SpeechToTextChunkResponseModel } from "@elevenlabs/elevenlabs-js/api/index.js";
 import fs from "fs";
 import ffmpeg from "fluent-ffmpeg";
+import kuromoji from "kuromoji";
+import { promisify } from "util";
 
 // --- Speech-to-Text (SRT generation) ---
+
+let tokenizerInstance: kuromoji.Tokenizer<kuromoji.IpadicFeatures> | null =
+  null;
+
+async function getTokenizer(): Promise<
+  kuromoji.Tokenizer<kuromoji.IpadicFeatures>
+> {
+  if (tokenizerInstance) {
+    return tokenizerInstance;
+  }
+
+  const builder = kuromoji.builder({
+    dicPath: "node_modules/kuromoji/dict",
+  });
+
+  const buildAsync = promisify(builder.build.bind(builder));
+  tokenizerInstance = await buildAsync();
+  return tokenizerInstance;
+}
 
 function formatTimestamp(seconds: number): string {
   const h = Math.floor(seconds / 3600)
@@ -21,37 +42,170 @@ function formatTimestamp(seconds: number): string {
   return `${h}:${m}:${s},${ms}`;
 }
 
-function generateSrtFromWords(
+function isSentenceEnd(token: kuromoji.IpadicFeatures): boolean {
+  // 句点（。）や感嘆符、疑問符で文末を判定
+  return (
+    token.pos === "記号" &&
+    (token.surface_form === "。" ||
+      token.surface_form === "." ||
+      token.surface_form === "!" ||
+      token.surface_form === "！" ||
+      token.surface_form === "?" ||
+      token.surface_form === "？")
+  );
+}
+
+function isParticle(token: kuromoji.IpadicFeatures): boolean {
+  // 助詞かどうかを判定
+  return token.pos === "助詞";
+}
+
+function isIndependentWord(token: kuromoji.IpadicFeatures): boolean {
+  // 自立語かどうかを判定（新しい文節の開始となる品詞）
+  const independentPOS = [
+    "名詞",
+    "動詞",
+    "形容詞",
+    "副詞",
+    "接続詞",
+    "連体詞",
+    "感動詞",
+    "接頭詞",
+  ];
+  return independentPOS.includes(token.pos);
+}
+
+async function generateSrtFromWords(
   words: Array<{ text: string; start?: number; end?: number }>
-): string {
+): Promise<string> {
+  const tokenizer = await getTokenizer();
+  const maxCharsPerSubtitle = 10; // 最大文字数
+
+  // words配列から全テキストを結合
+  const fullText = words.map((w) => w.text).join("");
+
+  // 形態素解析
+  const tokens = tokenizer.tokenize(fullText);
+
   let srtContent = "";
   let index = 1;
-  const maxWordsPerSubtitle = 10;
-  const maxDuration = 5;
+  let currentSentence: string[] = [];
+  let currentBunsetsu: string[] = []; // 現在の文節
+  let sentenceStartChar = 0;
+  let processedChars = 0;
 
-  for (let i = 0; i < words.length; ) {
-    const chunkWords: string[] = [];
-    const startTime = words[i]?.start || 0;
-    let endTime = words[i]?.end || 0;
+  // 文字数からwords配列のインデックスを取得するマップを作成
+  const charToWordMap: number[] = [];
+  let totalChars = 0;
+  for (let i = 0; i < words.length; i++) {
+    const wordText = words[i]?.text || "";
+    for (let j = 0; j < wordText.length; j++) {
+      charToWordMap.push(i);
+    }
+    totalChars += wordText.length;
+  }
 
-    while (i < words.length && chunkWords.length < maxWordsPerSubtitle) {
-      const word = words[i];
-      const currentEnd = word?.end || 0;
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (!token) continue;
 
-      if (currentEnd - startTime > maxDuration && chunkWords.length > 0) {
-        break;
+    const prevToken = i > 0 ? tokens[i - 1] : null;
+
+    // 現在の文節が空ではなく、かつ、トークンが自立語の場合
+    // -> 新しい文節の始まりと判断
+    // ただし、数字や記号、接尾辞が連続する場合は同じ文節として扱う
+    const shouldStartNewBunsetsu =
+      currentBunsetsu.length > 0 &&
+      isIndependentWord(token) &&
+      !(
+        prevToken &&
+        (prevToken.pos === "名詞" && prevToken.pos_detail_1 === "数") &&
+        (token.pos === "名詞" || token.pos === "記号")
+      ) &&
+      !(
+        prevToken &&
+        prevToken.pos === "記号" &&
+        (token.pos === "名詞" || token.pos === "記号")
+      );
+
+    if (shouldStartNewBunsetsu) {
+      // 文節を完成させる
+      const bunsetsuText = currentBunsetsu.join("");
+      currentSentence.push(bunsetsuText);
+
+      // 最後のスペース以降が10文字を超えている場合はスペースを追加
+      const currentText = currentSentence.join("");
+      const lastSpaceIndex = currentText.lastIndexOf(" ");
+      const textSinceLastSpace =
+        lastSpaceIndex === -1
+          ? currentText
+          : currentText.substring(lastSpaceIndex + 1);
+
+      if (textSinceLastSpace.length > maxCharsPerSubtitle) {
+        currentSentence.push(" ");
       }
 
-      chunkWords.push(word?.text || "");
-      endTime = currentEnd;
-      i++;
+      currentBunsetsu = [];
     }
 
-    const text = chunkWords.join(" ");
+    currentBunsetsu.push(token.surface_form);
+    processedChars += token.surface_form.length;
+
+    const shouldBreak = isSentenceEnd(token);
+
+    if (shouldBreak) {
+      // 残りの文節を追加
+      if (currentBunsetsu.length > 0) {
+        currentSentence.push(currentBunsetsu.join(""));
+        currentBunsetsu = [];
+      }
+
+      if (currentSentence.length > 0) {
+        // 開始と終了のwordsインデックスを取得
+        const startWordIndex = charToWordMap[sentenceStartChar] ?? 0;
+        const endWordIndex =
+          charToWordMap[
+            Math.min(processedChars - 1, charToWordMap.length - 1)
+          ] ?? words.length - 1;
+
+        const startTime = words[startWordIndex]?.start ?? 0;
+        const endTime = words[endWordIndex]?.end ?? startTime;
+
+        // スペースはそのまま（改行に置き換えない）
+        const text = currentSentence.join("");
+        srtContent += `${index}\n`;
+        srtContent += `${formatTimestamp(startTime)} --> ${formatTimestamp(
+          endTime
+        )}\n`;
+        srtContent += `${text}\n\n`;
+        index++;
+
+        currentSentence = [];
+        sentenceStartChar = processedChars;
+      }
+    }
+  }
+
+  // 残りのテキストがあれば追加
+  if (currentBunsetsu.length > 0) {
+    currentSentence.push(currentBunsetsu.join(""));
+  }
+
+  if (currentSentence.length > 0) {
+    const startWordIndex = charToWordMap[sentenceStartChar] ?? 0;
+    const endWordIndex =
+      charToWordMap[charToWordMap.length - 1] ?? words.length - 1;
+
+    const startTime = words[startWordIndex]?.start ?? 0;
+    const endTime = words[endWordIndex]?.end ?? startTime;
+
+    // スペースはそのまま（改行に置き換えない）
+    const text = currentSentence.join("");
     srtContent += `${index}\n`;
-    srtContent += `${formatTimestamp(startTime)} --> ${formatTimestamp(endTime)}\n`;
+    srtContent += `${formatTimestamp(startTime)} --> ${formatTimestamp(
+      endTime
+    )}\n`;
     srtContent += `${text}\n\n`;
-    index++;
   }
 
   return srtContent;
@@ -113,7 +267,7 @@ export async function speechToText(client: ElevenLabsClient) {
 
       // Step 3: Generate SRT content from the words
       const srtContent = finalResult?.words
-        ? generateSrtFromWords(finalResult.words)
+        ? await generateSrtFromWords(finalResult.words)
         : "";
 
       fs.writeFileSync(srtFilePath, srtContent);
@@ -156,7 +310,7 @@ async function generateVideoWithSubtitle(
 ): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     ffmpeg()
-      .input("background.jpg")
+      .input("background.png")
       .inputOptions(["-loop 1"])
       .input(audioFilePath)
       .outputOptions([
@@ -166,7 +320,7 @@ async function generateVideoWithSubtitle(
         "-b:a 192k",
         "-pix_fmt yuv420p",
         "-shortest",
-        `-vf subtitles=${srtFilePath}:force_style='FontSize=24,PrimaryColour=&HFFFFFF,OutlineColour=&H80000000,BackColour=&H80000000,BorderStyle=3,Outline=1,Shadow=0,MarginV=20'`,
+        `-vf subtitles=${srtFilePath}:force_style='FontSize=24,PrimaryColour=&HFFFFFF,BackColour=&H80000000,BorderStyle=4,Outline=0,Shadow=0,MarginV=20,MarginL=10,MarginR=10'`,
       ])
       .output(videoFilePath)
       .on("end", () => {

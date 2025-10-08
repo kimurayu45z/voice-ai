@@ -5,31 +5,24 @@ import type { TextToSpeechRequest } from "@elevenlabs/elevenlabs-js/api/index.js
 
 function splitTextIntoChunks(
   text: string,
-  maxChunkSize: number = 3000
+  maxChunkSize: number = 500
 ): string[] {
-  // テキストを段落（改行2つ）で分割
-  const paragraphs = text.split(/\n\n+/);
+  // テキストを文単位（句点）で分割
+  const sentences = text.split(/(?<=[。．！？])/);
 
-  // 3000文字制限を考慮して段落を結合（SSMLのbreakタグを追加）
   const chunks: string[] = [];
   let currentChunk = "";
 
-  for (const paragraph of paragraphs) {
-    // 現在のチャンクに段落を追加した場合の長さを計算
-    // 段落間にポーズを追加
-    const separator = currentChunk ? "..." : "";
-    const potentialLength =
-      currentChunk.length + separator.length + paragraph.length;
+  for (const sentence of sentences) {
+    const potentialLength = currentChunk.length + sentence.length;
 
-    if (potentialLength > maxChunkSize) {
-      // 3000文字を超える場合は現在のチャンクを保存して新しいチャンクを開始
-      if (currentChunk) {
-        chunks.push(currentChunk);
-      }
-      currentChunk = paragraph;
+    if (potentialLength > maxChunkSize && currentChunk) {
+      // maxChunkSizeを超える場合は現在のチャンクを保存
+      chunks.push(currentChunk);
+      currentChunk = sentence;
     } else {
-      // 3000文字以内なら現在のチャンクに追加
-      currentChunk += separator + paragraph;
+      // maxChunkSize以内なら現在のチャンクに追加
+      currentChunk += sentence;
     }
   }
 
@@ -46,7 +39,12 @@ export async function textToSpeech(
   voiceId = "RZ7g88QZqj5QobZ3Y0Ok"
 ) {
   const text = fs.readFileSync("out/speech.txt").toString();
-  const chunks = splitTextIntoChunks(text, 3000);
+  const chunks = splitTextIntoChunks(text, 500);
+
+  console.log(`チャンク数: ${chunks.length}`);
+  chunks.forEach((chunk, i) => {
+    console.log(`チャンク${i}: ${chunk.length}文字`);
+  });
 
   // 各チャンクごとにconvertリクエストを送信して個別ファイルに保存
   for (let i = 0; i < chunks.length; i++) {

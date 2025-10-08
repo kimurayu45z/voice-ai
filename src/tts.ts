@@ -38,6 +38,21 @@ export async function textToSpeech(
   client: ElevenLabsClient,
   voiceId = "3VEofVNyr4k6BtjvBTfN"
 ) {
+  // 既存のoutput-*ファイルを削除
+  const existingFiles = fs
+    .readdirSync("out")
+    .filter((file) =>
+      file.match(/^output-\d+\.(mp3|srt|mp4)$|^output-\d+-corrected\.srt$/)
+    );
+
+  if (existingFiles.length > 0) {
+    console.log(`既存のファイルを削除中...`);
+    existingFiles.forEach((file) => {
+      fs.unlinkSync(`out/${file}`);
+      console.log(`削除: ${file}`);
+    });
+  }
+
   const text = fs.readFileSync("out/speech.txt").toString();
   const chunks = splitTextIntoChunks(text, 500);
 

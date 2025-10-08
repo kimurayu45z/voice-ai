@@ -26,6 +26,7 @@ import {
 import { getAiNews } from "./apitube.js";
 import { getAiNewsNewsApi } from "./newsapi.js";
 import { checkMusicInstrumental, createMusicInstrumental } from "./mureka.js";
+import { uploadToYouTube } from "./youtube.js";
 
 dotenv.config();
 
@@ -161,6 +162,37 @@ switch (command) {
     break;
   }
 
+  case "youtube-upload": {
+    if (!process.argv[3]) {
+      throw Error("video path must be specified");
+    }
+    const videoPath = process.argv[3];
+    const title = process.argv[4] || "Untitled Video";
+    const description = process.argv[5] || "";
+    const privacyStatus = (process.argv[6] || "private") as 'public' | 'private' | 'unlisted';
+
+    const credentials = {
+      clientId: process.env.YOUTUBE_CLIENT_ID!,
+      clientSecret: process.env.YOUTUBE_CLIENT_SECRET!,
+      redirectUri: process.env.YOUTUBE_REDIRECT_URI || 'http://localhost:3000/oauth2callback',
+      refreshToken: process.env.YOUTUBE_REFRESH_TOKEN!,
+    };
+
+    if (!credentials.clientId || !credentials.clientSecret || !credentials.refreshToken) {
+      throw Error('Missing YouTube OAuth credentials in environment variables');
+    }
+
+    const result = await uploadToYouTube(videoPath, {
+      title,
+      description,
+      privacyStatus,
+    }, credentials);
+
+    console.log('Upload successful!');
+    console.log('Video URL:', result.videoUrl);
+    break;
+  }
+
   case "models":
     console.log(await elevenlabs.models.list());
     break;
@@ -174,16 +206,24 @@ switch (command) {
 Usage: npx tsx src/index.ts <command> [args]
 
 Commands:
-  openai-report [prompt]  - Generate report using OpenAI
-  openai-text             - Convert report to text for reading
-  blog-gemini             - Convert report to blog post
-  blog-claude             - Convert report to blog post
-  tts                     - Convert text to speech
-  stt                     - Convert speech to text (SRT)
-  combine                 - Combine audio files
-  hot-coins               - Fetch hot coins from LunarCrush
-  ai-topics [query]       - Fetch AI topics from LunarCrush
-  models                  - List ElevenLabs models
-  voices                  - List ElevenLabs voices
+  openai-report [prompt]       - Generate report using OpenAI
+  openai-text                  - Convert report to text for reading
+  blog-gemini                  - Convert report to blog post (Gemini)
+  blog-claude                  - Convert report to blog post (Claude)
+  tts                          - Convert text to speech
+  stt-srt                      - Convert speech to text (SRT)
+  stt-mp4                      - Generate videos with subtitles
+  combine                      - Combine audio files
+  ai-topics                    - Fetch AI topics from NewsAPI
+  coin-topics                  - Fetch coin topics from LunarCrush
+  coin-topic <name>            - Fetch specific coin topic
+  video-gen <prompt>           - Generate video using OpenAI
+  video-check <id>             - Check video generation status
+  video-download <id>          - Download generated video
+  music-gen <prompt>           - Generate music using Mureka
+  music-check <id>             - Check music generation status
+  youtube-upload <path> [title] [description] [privacy]  - Upload video to YouTube
+  models                       - List ElevenLabs models
+  voices                       - List ElevenLabs voices
 `);
 }

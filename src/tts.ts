@@ -61,23 +61,32 @@ export async function textToSpeech(
     console.log(`チャンク${i}: ${chunk.length}文字`);
   });
 
-  // 各チャンクを並列処理
-  await Promise.all(
-    chunks.map(async (chunk, i) => {
-      const requestOptions: TextToSpeechRequest = {
-        text: chunk,
-        modelId: "eleven_v3",
-      };
+  // 5個ずつ並列処理
+  const batchSize = 5;
+  for (let batchStart = 0; batchStart < chunks.length; batchStart += batchSize) {
+    const batchEnd = Math.min(batchStart + batchSize, chunks.length);
+    const batch = chunks.slice(batchStart, batchEnd);
 
-      const res = await client.textToSpeech.convert(voiceId, requestOptions);
+    console.log(`バッチ処理中: チャンク ${batchStart} から ${batchEnd - 1}`);
 
-      // 各チャンクを個別のファイルに保存
-      const outputFileName = `out/output-${i}.mp3`;
-      const outputStream = fs.createWriteStream(outputFileName);
-      await pipeline(res, outputStream);
-      console.log(`チャンク ${i} が ${outputFileName} として保存されました`);
-    })
-  );
+    await Promise.all(
+      batch.map(async (chunk, batchIndex) => {
+        const i = batchStart + batchIndex;
+        const requestOptions: TextToSpeechRequest = {
+          text: chunk,
+          modelId: "eleven_v3",
+        };
+
+        const res = await client.textToSpeech.convert(voiceId, requestOptions);
+
+        // 各チャンクを個別のファイルに保存
+        const outputFileName = `out/output-${i}.mp3`;
+        const outputStream = fs.createWriteStream(outputFileName);
+        await pipeline(res, outputStream);
+        console.log(`チャンク ${i} が ${outputFileName} として保存されました`);
+      })
+    );
+  }
 }
 
 export async function combineAudioFiles(

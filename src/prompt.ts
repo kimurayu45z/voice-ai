@@ -6,7 +6,8 @@ import fs from "fs";
 export async function createReportOpenAi(
   client: OpenAI,
   systemPrompt: string,
-  prompt: string
+  prompt: string,
+  filePath: string
 ) {
   const resp = await client.responses.create({
     model: "gpt-5-2025-08-07",
@@ -23,7 +24,50 @@ export async function createReportOpenAi(
     ],
   });
 
-  fs.writeFileSync("out/report.md", resp.output_text);
+  fs.writeFileSync(filePath, resp.output_text);
+}
+
+export async function createReportGemini(
+  client: GoogleGenAI,
+  systemPrompt: string,
+  prompt: string,
+  filePath: string
+) {
+  const response = await client.models.generateContent({
+    model: "gemini-2.5-pro",
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    config: {
+      systemInstruction: systemPrompt,
+      tools: [{ googleSearch: {} }],
+    },
+  });
+  const text = response.text || "";
+
+  fs.writeFileSync(filePath, text);
+}
+
+export async function createReportClaude(
+  client: Anthropic,
+  systemPrompt: string,
+  prompt: string,
+  filePath: string
+) {
+  const message = await client.messages.create({
+    model: "claude-sonnet-4-5-20250929",
+    max_tokens: 16000,
+    system: systemPrompt,
+    messages: [
+      {
+        role: "user",
+        content: prompt,
+      },
+    ],
+  });
+
+  const textBlock = message.content.find((block) => block.type === "text");
+  const text = textBlock && textBlock.type === "text" ? textBlock.text : "";
+
+  fs.writeFileSync(filePath, text);
 }
 
 export async function createTextToReadOpenAi(
@@ -57,31 +101,37 @@ ${report}
   fs.writeFileSync("out/speech.txt", resp2.output_text);
 }
 
-export async function createReportGemini(
+export async function createTextToReadGemini(
   client: GoogleGenAI,
-  systemPrompt: string,
-  prompt: string,
-  filePath: string
+  systemPrompt: string
 ) {
-  const response = await client.models.generateContent({
-    model: "gemini-2.5-pro",
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-    config: {
-      systemInstruction: systemPrompt,
-      tools: [{ googleSearch: {} }],
-    },
-  });
-  const text = response.text || "";
-
-  fs.writeFileSync(filePath, text);
-}
-
-export async function createTextToReadGemini(client: GoogleGenAI) {
   const report = fs.readFileSync("out/report.md", "utf-8");
 
   await createReportGemini(
     client,
-    "",
+    systemPrompt,
+    `
+以下は、AIが作ったレポート。これを、読み上げる台本にしたい。
+マークダウン用の記号とか、括弧や、リファレンスURL、「以上、台本でした」と言った文言など、台本としてふさわしくない要素を取り除いて、プレーンテキストとして出力してください。
+そのまま出力をプログラムで音声化APIに使いたいので、セクションごとのタイトルとかも要りません。台本のみ出力してください。
+
+\`\`\`
+${report}
+\`\`\`
+`,
+    "out/speech.txt"
+  );
+}
+
+export async function createTextToReadClaude(
+  client: Anthropic,
+  systemPrompt: string
+) {
+  const report = fs.readFileSync("out/report.md", "utf-8");
+
+  await createReportClaude(
+    client,
+    systemPrompt,
     `
 以下は、AIが作ったレポート。これを、読み上げる台本にしたい。
 マークダウン用の記号とか、括弧や、リファレンスURL、「以上、台本でした」と言った文言など、台本としてふさわしくない要素を取り除いて、プレーンテキストとして出力してください。

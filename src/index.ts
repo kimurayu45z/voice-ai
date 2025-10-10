@@ -14,6 +14,8 @@ import {
   createBlogGemini,
   createTextToReadOpenAi,
   createBlogClaude,
+  createReportGemini,
+  createTextToReadClaude,
 } from "./prompt.js";
 import { crypto, mcp, yuukiHarumi, yuukiHarumiSpeech } from "./template.js";
 import { fetchCoinTopic, fetchCoinTopics } from "./lunarcrush.js";
@@ -49,16 +51,17 @@ const claude = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const command = process.argv[2];
 
 switch (command) {
-  case "openai-report":
+  case "report-yuukiharumi":
     await createReportOpenAi(
       openai,
       yuukiHarumi,
-      process.argv[3] || "今日の株式市場ニュースを調べて台本を作って。"
+      process.argv[3] || "今日の株の注目銘柄に関するレポートを作って。",
+      "out/report.md"
     );
     break;
 
-  case "openai-text":
-    await createTextToReadOpenAi(openai, yuukiHarumiSpeech);
+  case "text-yuukiharumi":
+    await createTextToReadClaude(claude, yuukiHarumiSpeech);
     break;
 
   case "blog-gemini":
@@ -169,27 +172,40 @@ switch (command) {
     const videoPath = process.argv[3];
     const title = process.argv[4] || "Untitled Video";
     const description = process.argv[5] || "";
-    const privacyStatus = (process.argv[6] || "private") as 'public' | 'private' | 'unlisted';
+    const privacyStatus = (process.argv[6] || "private") as
+      | "public"
+      | "private"
+      | "unlisted";
 
     const credentials = {
       clientId: process.env.YOUTUBE_CLIENT_ID!,
       clientSecret: process.env.YOUTUBE_CLIENT_SECRET!,
-      redirectUri: process.env.YOUTUBE_REDIRECT_URI || 'http://localhost:3000/oauth2callback',
+      redirectUri:
+        process.env.YOUTUBE_REDIRECT_URI ||
+        "http://localhost:3000/oauth2callback",
       refreshToken: process.env.YOUTUBE_REFRESH_TOKEN!,
     };
 
-    if (!credentials.clientId || !credentials.clientSecret || !credentials.refreshToken) {
-      throw Error('Missing YouTube OAuth credentials in environment variables');
+    if (
+      !credentials.clientId ||
+      !credentials.clientSecret ||
+      !credentials.refreshToken
+    ) {
+      throw Error("Missing YouTube OAuth credentials in environment variables");
     }
 
-    const result = await uploadToYouTube(videoPath, {
-      title,
-      description,
-      privacyStatus,
-    }, credentials);
+    const result = await uploadToYouTube(
+      videoPath,
+      {
+        title,
+        description,
+        privacyStatus,
+      },
+      credentials
+    );
 
-    console.log('Upload successful!');
-    console.log('Video URL:', result.videoUrl);
+    console.log("Upload successful!");
+    console.log("Video URL:", result.videoUrl);
     break;
   }
 

@@ -132,6 +132,13 @@ export const yuukiHarumi = `### 結城はるみさんのレポートスタイル
 
 *   **簡潔な結論と提言:** レポートの内容を簡潔にまとめ、主要な結論や提言を明確に提示します。
 *   **客観的かつ落ち着いたトーン:** レポート全体を通して客観的かつ落ち着いたトーンを保ちつつ、特に重要な箇所や強調したい点においては、明確で力強い表現を用いることで、専門家としての信頼性を確保します。
+
+## おすすめの情報源
+
+- https://www.release.tdnet.info/inbs/I_main_00.html
+- https://meigaralive.com/
+- https://www.rizumu.net/
+- <https://www.quiverquant.com/congresstrading/politician/Nancy%20Pelosi-P000197>
 `;
 
 export const yuukiHarumiSpeech = `# ニュース速報読み上げ用プロンプト

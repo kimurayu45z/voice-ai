@@ -16,8 +16,15 @@ import {
   createBlogClaude,
   createReportGemini,
   createTextToReadClaude,
+  createTextToReadGemini,
 } from "./prompt.js";
-import { crypto, mcp, yuukiHarumi, yuukiHarumiSpeech } from "./template.js";
+import {
+  crypto,
+  mcp,
+  yuukiHarumi,
+  yuukiHarumiGemini,
+  yuukiHarumiSpeech,
+} from "./template.js";
 import { fetchCoinTopic, fetchCoinTopics } from "./lunarcrush.js";
 import * as fs from "fs";
 import {
@@ -61,7 +68,7 @@ switch (command) {
     break;
 
   case "text-yuukiharumi":
-    await createTextToReadClaude(claude, yuukiHarumiSpeech);
+    await createTextToReadOpenAi(openai, yuukiHarumiSpeech);
     break;
 
   case "blog-gemini":

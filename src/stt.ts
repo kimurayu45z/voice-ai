@@ -228,7 +228,10 @@ export async function speechToText(
 3. 元の台本と照らし合わせて、正しい表現に修正してください
 4. SRTファイルのフォーマットを保持してください
 5. 各字幕テキストが10文字を超える場合、自然な位置（文節の区切り）に半角スペースを挿入してください
-6. スペースは10文字ごとを目安に、読みやすい位置に入れてください（例：「金相場が史上初めて 1トロイオンス 4000ドル台に乗せ」）`,
+6. スペースは10文字ごとを目安に、読みやすい位置に入れてください（例：「金相場が史上初めて 1トロイオンス 4000ドル台に乗せ」）
+7. 漢数字は使わずアラビア数字に置き換え、1,000のように3桁ごとに,を入れてください
+8. 結城晴美などの漢字名は間違いで、「結城はるみ」が絶対です
+`,
           messages: [
             {
               role: "user",
@@ -398,78 +401,4 @@ export async function combineVideos() {
 
   console.log("動画ファイルの結合を開始...");
   await concatVideosWithFfmpeg(files, "out/output-final.mp4");
-}
-
-export async function correctSrtWithClaude(client: Anthropic) {
-  const speechText = fs.readFileSync("out/speech.txt", "utf-8");
-  const srtFiles = fs
-    .readdirSync("out")
-    .filter((file) => file.match(/^output-\d+\.srt$/))
-    .sort((a, b) => {
-      const numA = parseInt(a.match(/\d+/)![0]);
-      const numB = parseInt(b.match(/\d+/)![0]);
-      return numA - numB;
-    });
-
-  if (srtFiles.length === 0) {
-    console.log("訂正対象のSRTファイルが見つかりませんでした");
-    return;
-  }
-
-  console.log(`${srtFiles.length}個のSRTファイルを訂正します...`);
-
-  // 各SRTファイルを並列処理
-  await Promise.all(
-    srtFiles.map(async (file) => {
-      const srtPath = `out/${file}`;
-      const srtContent = fs.readFileSync(srtPath, "utf-8");
-
-      console.log(`${file} の訂正を開始...`);
-
-      const message = await client.messages.create({
-        model: "claude-sonnet-4-5-20250929",
-        max_tokens: 8000,
-        system: `あなたは文字起こしの訂正専門家です。音声認識で生成されたSRTファイルの文字起こしを、元の台本を参照して訂正してください。
-
-重要な注意事項：
-1. タイムスタンプは絶対に変更しないでください
-2. 文字起こしの誤認識（同音異義語の間違い、聞き間違いなど）を訂正してください
-3. 元の台本と照らし合わせて、正しい表現に修正してください
-4. SRTファイルのフォーマットを保持してください
-5. スペースによる区切りはそのまま保持してください`,
-        messages: [
-          {
-            role: "user",
-            content: `以下の元の台本を参照して、SRTファイルの文字起こしを訂正してください。
-
-元の台本：
-\`\`\`
-${speechText}
-\`\`\`
-
-訂正するSRTファイル：
-\`\`\`
-${srtContent}
-\`\`\`
-
-訂正後のSRTファイルをそのまま出力してください（説明文などは不要です）。`,
-          },
-        ],
-      });
-
-      const textBlock = message.content.find((block) => block.type === "text");
-      const correctedText =
-        textBlock && textBlock.type === "text" ? textBlock.text : "";
-
-      // コードブロックで囲まれている場合は取り除く
-      const cleanedText = correctedText
-        .replace(/^```[\s\S]*?\n/, "")
-        .replace(/\n```$/, "");
-
-      fs.writeFileSync(srtPath, cleanedText);
-      console.log(`${file} の訂正が完了しました`);
-    })
-  );
-
-  console.log("すべてのSRTファイルの訂正が完了しました");
 }
